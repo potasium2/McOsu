@@ -1200,9 +1200,9 @@ double OsuDifficultyCalculator::computeAimValue(const ScoreData &score, const Os
 		+ (score.totalHits > 2000 ? std::log10(((double)score.totalHits / 2000.0)) * 0.5 : 0.0);
 	aimValue *= lengthBonus;
 
-	// Combo Scaling Removal
+	// Combo Scaling Removal - I can't replicate exactly so for now I just assume there are 4 times as many strains to the current star rating.
 	if (effectiveMissCount > 0 && score.totalHits > 0)
-		aimValue *= 0.96 / ((score.countMiss / (4 * std::pow(std::log(attributes.AimStrain), 0.94))) + 1);
+		aimValue *= 0.96 / ((effectiveMissCount / (4 * std::pow(std::log(attributes.AimStrain * 4), 0.94))) + 1);
 
 	// ar bonus
 	double approachRateFactor = 0.0; // see https://github.com/ppy/osu-performance/pull/125/
@@ -1249,9 +1249,9 @@ double OsuDifficultyCalculator::computeSpeedValue(const ScoreData &score, const 
 		+ (score.totalHits > 2000 ? std::log10(((double)score.totalHits / 2000.0)) * 0.5 : 0.0);
 	speedValue *= lengthBonus;
 
-	// Combo Scaling Removal
+	// Combo Scaling Removal - I can't replicate exactly so for now I just assume there are 4 times as many strains to the current star rating.
 	if (effectiveMissCount > 0 && score.totalHits > 0)
-		speedValue *= 0.96 / ((score.countMiss / (4 * std::pow(std::log(attributes.SpeedStrain), 0.94))) + 1);
+		speedValue *= 0.96 / ((effectiveMissCount / (4 * std::pow(std::log(attributes.SpeedStrain * 4), 0.94))) + 1);
 
 	// ar bonus
 	double approachRateFactor = 0.0; // see https://github.com/ppy/osu-performance/pull/125/
