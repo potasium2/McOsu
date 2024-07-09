@@ -1200,14 +1200,9 @@ double OsuDifficultyCalculator::computeAimValue(const ScoreData &score, const Os
 		+ (score.totalHits > 2000 ? std::log10(((double)score.totalHits / 2000.0)) * 0.5 : 0.0);
 	aimValue *= lengthBonus;
 
-	// see https://github.com/ppy/osu-performance/pull/129/
-	// Penalize misses by assessing # of misses relative to the total # of objects. Default a 3% reduction for any # of misses.
+	// Combo Scaling Removal
 	if (effectiveMissCount > 0 && score.totalHits > 0)
-		aimValue *= 0.97 * std::pow(1.0 - std::pow(effectiveMissCount / (double)score.totalHits, 0.775), effectiveMissCount);
-
-	// combo scaling
-	if (score.beatmapMaxCombo > 0)
-		aimValue *= std::min(std::pow((double)score.scoreMaxCombo, 0.8) / std::pow((double)score.beatmapMaxCombo, 0.8), 1.0);
+		aimValue *= 0.96 / ((score.countMiss / (4 * std::pow(std::log(attributes.AimStrain), 0.94))) + 1);
 
 	// ar bonus
 	double approachRateFactor = 0.0; // see https://github.com/ppy/osu-performance/pull/125/
@@ -1254,14 +1249,9 @@ double OsuDifficultyCalculator::computeSpeedValue(const ScoreData &score, const 
 		+ (score.totalHits > 2000 ? std::log10(((double)score.totalHits / 2000.0)) * 0.5 : 0.0);
 	speedValue *= lengthBonus;
 
-	// see https://github.com/ppy/osu-performance/pull/129/
-	// Penalize misses by assessing # of misses relative to the total # of objects. Default a 3% reduction for any # of misses.
+	// Combo Scaling Removal
 	if (effectiveMissCount > 0 && score.totalHits > 0)
-		speedValue *= 0.97 * std::pow(1.0 - std::pow(effectiveMissCount / (double)score.totalHits, 0.775), std::pow(effectiveMissCount, 0.875));
-
-	// combo scaling
-	if (score.beatmapMaxCombo > 0)
-		speedValue *= std::min(std::pow((double)score.scoreMaxCombo, 0.8) / std::pow((double)score.beatmapMaxCombo, 0.8), 1.0);
+		speedValue *= 0.96 / ((score.countMiss / (4 * std::pow(std::log(attributes.SpeedStrain), 0.94))) + 1);
 
 	// ar bonus
 	double approachRateFactor = 0.0; // see https://github.com/ppy/osu-performance/pull/125/
