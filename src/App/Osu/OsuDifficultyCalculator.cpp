@@ -14,6 +14,7 @@
 #include "OsuBeatmap.h"
 #include "OsuGameRules.h"
 #include "OsuReplay.h"
+#include "OsuScore.h"
 
 #include "OsuSliderCurves.h"
 
@@ -268,11 +269,10 @@ double OsuDifficultyCalculator::calculateStarDiffForHitObjects(std::vector<OsuDi
 	// multiplier to normalize positions so that we can calc as if everything was the same circlesize.
 	// also handle high CS bonus
 
-	float radius_scaling_factor = normalized_radius / circleRadiusInOsuPixels;
+	float smallCircleBonus = 1.0f;
 	if (circleRadiusInOsuPixels < circlesize_buff_treshold)
 	{
-		const float smallCircleBonus = std::min(circlesize_buff_treshold - circleRadiusInOsuPixels, 5.0f) / 50.0f;
-		radius_scaling_factor *= 1.0f + smallCircleBonus;
+		smallCircleBonus += std::min(circlesize_buff_treshold - circleRadiusInOsuPixels, 30.0f) / 40.0f;
 	}
 
 
@@ -1085,10 +1085,10 @@ double OsuDifficultyCalculator::calculatePPv2(Osu *osu, OsuBeatmap *beatmap, dou
 		modsLegacy |= (m_osu_slider_scorev2_ref->getBool() ? OsuReplay::Mods::ScoreV2 : 0);
 	}
 
-	return calculatePPv2(modsLegacy, osu->getSpeedMultiplier(), beatmap->getAR(), beatmap->getOD(), aim, aimSliderFactor, speed, speedNotes, numHitObjects, numCircles, numSliders, numSpinners, maxPossibleCombo, combo, misses, c300, c100, c50);
+	return calculatePPv2(modsLegacy, osu->getSpeedMultiplier(), beatmap->getAR(), beatmap->getOD(), osu->getScore()->getUnstableRate(), aim, aimSliderFactor, speed, speedNotes, numHitObjects, numCircles, numSliders, numSpinners, maxPossibleCombo, combo, misses, c300, c100, c50);
 }
 
-double OsuDifficultyCalculator::calculatePPv2(int modsLegacy, double timescale, double ar, double od, double aim, double aimSliderFactor, double speed, double speedNotes, int numHitObjects, int numCircles, int numSliders, int numSpinners, int maxPossibleCombo, int combo, int misses, int c300, int c100, int c50)
+double OsuDifficultyCalculator::calculatePPv2(int modsLegacy, double timescale, double ar, double od, double ur, double aim, double aimSliderFactor, double speed, double speedNotes, int numHitObjects, int numCircles, int numSliders, int numSpinners, int maxPossibleCombo, int combo, int misses, int c300, int c100, int c50)
 {
 	// NOTE: depends on active mods + OD + AR
 
@@ -1118,6 +1118,7 @@ double OsuDifficultyCalculator::calculatePPv2(int modsLegacy, double timescale, 
 		score.totalSuccessfulHits = c300 + c100 + c50;
 		score.beatmapMaxCombo = maxPossibleCombo;
 		score.scoreMaxCombo = combo;
+		score.unstableRate = ur;
 		{
 			score.accuracy = (score.totalHits > 0 ? (double)(c300 * 300 + c100 * 100 + c50 * 50) / (double)(score.totalHits * 300) : 0.0);
 			score.amountHitObjectsWithAccuracy = (modsLegacy & OsuReplay::ScoreV2 ? score.totalHits : numCircles);
@@ -1194,9 +1195,12 @@ double OsuDifficultyCalculator::computeAimValue(const ScoreData &score, const Os
 	double rawAim = attributes.AimStrain;
 
 	double aimValue = std::pow(5.0 * std::max(1.0, rawAim / 0.0675) - 4.0, 3.0) / 100000.0;
+	
+	// Rake tapping nerf
+	aimValue = adjustPerformanceWithUR(aimValue, score.unstableRate)
 
 	// length bonus
-	double lengthBonus = 0.95 + 0.4 * std::min(1.0, ((double)score.totalHits / 2000.0))
+	double lengthBonus = 0.95 + 0.25 * std::min(1.0, ((double)score.totalHits / 2000.0))
 		+ (score.totalHits > 2000 ? std::log10(((double)score.totalHits / 2000.0)) * 0.5 : 0.0);
 	aimValue *= lengthBonus;
 
@@ -1234,23 +1238,25 @@ double OsuDifficultyCalculator::computeAimValue(const ScoreData &score, const Os
 		aimValue *= sliderNerfFactor;
 	}
 
-	// scale aim with acc
-	aimValue *= score.accuracy;
-	// also consider acc difficulty when doing that
-	aimValue *= 0.98 + std::pow(attributes.OverallDifficulty, 2.0) / 2500.0;
+	// Scale aim value wit unstable rate
+	aimValue *= std::erf(30 / std::sqrt(2) * score.unstableRate);
+	aimValue *= 0.98 + std::pow(100.0 / 9, 2.0) / 2500.0; // OD 11 SS stays the same.
 
 	return aimValue;
 }
 
 double OsuDifficultyCalculator::computeSpeedValue(const ScoreData &score, const Attributes &attributes, double effectiveMissCount)
 {
-	if ((score.modsLegacy & OsuReplay::Relax) && !osu_stars_and_pp_lazer_relax_autopilot_nerf_disabled.getBool())
+	if (score.unstableRate == std::numeric_limits<double>::infinity() && (score.modsLegacy & OsuReplay::Relax) && !osu_stars_and_pp_lazer_relax_autopilot_nerf_disabled.getBool())
 		return 0.0;
 
 	double speedValue = std::pow(5.0 * std::max(1.0, attributes.SpeedStrain / 0.0675) - 4.0, 3.0) / 100000.0;
 
+	// Rake tapping nerf
+	speedValue = adjustPerformanceWithUR(speedValue, score.unstableRate)
+
 	// length bonus
-	double lengthBonus = 0.95 + 0.4 * std::min(1.0, ((double)score.totalHits / 2000.0))
+	double lengthBonus = 0.95 + 0.25 * std::min(1.0, ((double)score.totalHits / 2000.0))
 		+ (score.totalHits > 2000 ? std::log10(((double)score.totalHits / 2000.0)) * 0.5 : 0.0);
 	speedValue *= lengthBonus;
 
@@ -1282,10 +1288,9 @@ double OsuDifficultyCalculator::computeSpeedValue(const ScoreData &score, const 
 	double relevantAccuracy = attributes.SpeedNoteCount == 0 ? 0 : (relevantCountGreat * 6.0 + relevantCountOk * 2.0 + relevantCountMeh) / (attributes.SpeedNoteCount * 6.0);
 
 	// see https://github.com/ppy/osu-performance/pull/128/
-	// Scale the speed value with accuracy and OD
-	speedValue *= (0.95 + std::pow(attributes.OverallDifficulty, 2.0) / 750.0) * std::pow((score.accuracy + relevantAccuracy) / 2.0, (14.5 - std::max(attributes.OverallDifficulty, 8.0)) / 2.0);
-	// Scale the speed value with # of 50s to punish doubletapping.
-	speedValue *= std::pow(0.99, score.countMeh < (score.totalHits / 500.0) ? 0.0 : score.countMeh - (score.totalHits / 500.0));
+	// Scale speed value with unstable rate
+	speedValue *= std::erf(20 / std::sqrt(2) * score.unstableRate);
+	speedValue *= 0.95 + std::pow(100.0 / 9, 2) / 750; // OD 11 SS stays the same.
 
 	return speedValue;
 }
@@ -1308,6 +1313,10 @@ double OsuDifficultyCalculator::computeAccuracyValue(const ScoreData &score, con
 	// length bonus
 	accuracyValue *= std::min(1.15, std::pow(score.amountHitObjectsWithAccuracy / 1000.0, 0.3));
 
+	// Punish very low amount of hits additionally to prevent big pp values right at the start of the map
+	if (score.amountHitObjectsWithAccuracy < 30)
+		accuracyValue *= std::sqrt((double)score.amountHitObjectsWithAccuracy / 30)
+
 	// hidden bonus
 	if (score.modsLegacy & OsuReplay::Mods::Hidden)
 		accuracyValue *= 1.08;
@@ -1318,3 +1327,14 @@ double OsuDifficultyCalculator::computeAccuracyValue(const ScoreData &score, con
 	return accuracyValue;
 }
 
+double OsuDifficultyCalculator::adjustPerformanceWithUR(double &performanceValue, float &ur)
+{
+	// Starting from this pp amount - penalty will be applied
+	double abusePoint = std::pow(600 / ur, 2);
+
+	if (performanceValue <= abusePoint) return performanceValue;
+
+	// Descale value to make log curve look correctly
+	const double size = 50;
+	performanceValue = scale * (std:log(performanceValue / scale + 1 - abusePoint / scale) + abusePoint / scale);
+}

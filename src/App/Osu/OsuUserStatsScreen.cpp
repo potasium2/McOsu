@@ -211,7 +211,7 @@ private:
 						if (maxPossibleCombo < 1)
 							continue;
 
-						pp = OsuDifficultyCalculator::calculatePPv2(score.modsLegacy, speedMultiplier, AR, OD, aimStars, aimSliderFactor, speedStars, speedNotes, numHitObjects, numCircles, numSliders, numSpinners, maxPossibleCombo, score.comboMax, score.numMisses, score.num300s, score.num100s, score.num50s);
+						pp = OsuDifficultyCalculator::calculatePPv2(score.modsLegacy, speedMultiplier, AR, OD, score.unstableRate, aimStars, aimSliderFactor, speedStars, speedNotes, numHitObjects, numCircles, numSliders, numSpinners, maxPossibleCombo, score.comboMax, score.numMisses, score.num300s, score.num100s, score.num50s);
 					}
 
 					// 5) overwrite score with new pp data (and handle imports)
